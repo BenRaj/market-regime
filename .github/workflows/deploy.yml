@@ -1,0 +1,88 @@
+name: CD — Deploy to VPS
+
+# Se déclenche APRÈS le workflow "CI — Tests", et uniquement si le CI a réussi
+# sur main. Même principe que TrdEsk : on ne déploie jamais du code qui casse
+# les tests. Le CD ne touche PAS au cron (installé une fois à la main).
+on:
+  workflow_run:
+    workflows: ["CI — Tests"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Rsync project to VPS
+        # Miroir du dépôt. Les dossiers propres au serveur (venv, reports, logs,
+        # state, .env) sont exclus : ils ne sont ni écrasés ni supprimés.
+        env:
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '.kiro/' \
+            --exclude '__pycache__' \
+            --exclude '*.pyc' \
+            --exclude 'venv/' \
+            --exclude 'reports/' \
+            --exclude 'logs/' \
+            --exclude 'state/' \
+            --exclude '.env' \
+            -e "ssh -i ~/.ssh/id_ed25519" \
+            ./ "${VPS_USER}@${VPS_HOST}:/opt/market-regime/"
+
+      - name: Update venv + smoke test
+        env:
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${VPS_USER}@${VPS_HOST}" bash -s << 'REMOTE'
+          set -e
+          cd /opt/market-regime
+          chmod +x run_daily.sh install_server.sh
+          ./install_server.sh --no-cron --no-test-run
+          # Smoke test : le venv doit pouvoir lancer les scripts des 3 skills
+          venv/bin/python skills/market-breadth-analyzer/scripts/market_breadth_analyzer.py --help >/dev/null
+          venv/bin/python skills/uptrend-analyzer/scripts/uptrend_analyzer.py --help >/dev/null
+          venv/bin/python skills/exposure-coach/scripts/calculate_exposure.py --help >/dev/null
+          echo "scripts OK"
+          REMOTE
+          echo "✅ Déploiement VPS terminé"
+
+      - name: Notify Slack
+        if: ${{ always() }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -z "$SLACK_WEBHOOK_URL" ] && { echo "No webhook, skip"; exit 0; }
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          if [ "$JOB_STATUS" = "success" ]; then
+            TEXT=":white_check_mark: *market-regime déployé sur le VPS* (\`${SHORT_SHA}\`)"
+          else
+            TEXT=":rotating_light: *Échec du déploiement market-regime* (\`${SHORT_SHA}\`)\nVoir les logs : ${RUN_URL}"
+          fi
+          PAYLOAD=$(jq -n --arg t "$TEXT" '{text: $t}')
+          HOOK=$(printf '%s' "$SLACK_WEBHOOK_URL" | tr -d '[:space:]')
+          curl -g -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$HOOK"

@@ -1,0 +1,45 @@
+name: CI — Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install -r requirements-dev.txt
+
+      - name: Syntax check scripts
+        run: |
+          bash -n run_daily.sh
+          bash -n install_server.sh
+
+      - name: Tests market-breadth-analyzer
+        working-directory: skills/market-breadth-analyzer/scripts
+        run: python -m pytest tests -q --ignore=tests/test_provenance_contract.py
+
+      - name: Tests uptrend-analyzer
+        working-directory: skills/uptrend-analyzer/scripts
+        run: python -m pytest tests -q --ignore=tests/test_provenance_contract.py
+
+      # 4 tests exigent des fichiers du dépôt amont non copiés ici
+      # (skills sector-analyst, theme-detector, ftd-detector) : exclus.
+      - name: Tests exposure-coach
+        working-directory: skills/exposure-coach/scripts
+        run: |
+          python -m pytest tests -q \
+            --ignore=tests/test_provenance_contract.py \
+            --deselect tests/test_market_status_overlay.py::test_fixtures_match_what_ftd_detector_produces_today \
+            --deselect tests/test_sector_contract.py::test_producer_format_json_flows_into_actual_cli \
+            --deselect tests/test_sector_contract.py::test_producer_pipeline_with_blank_slope_flows_into_score \
+            --deselect tests/test_theme_contract.py::test_native_producer_warning_report_to_actual_cli

@@ -1,15 +1,20 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
 # ============================================================
 # market-regime daily run — market-regime-daily workflow
-# Exécute les 3 steps sans API requise
+# Exécute les 3 steps sans API requise.
+# Compatible bash (serveur Linux) et macOS ; sortie dupliquée dans logs/.
 # ============================================================
 set -euo pipefail
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Active le venv Python 3.11 si présent
+# Active le venv Python si présent
 source "${SCRIPT_DIR}/venv/bin/activate" 2>/dev/null || true
+
+# Journal d'exécution (utile sous cron, où la sortie est sinon perdue)
+mkdir -p logs
+exec > >(tee -a "logs/run_$(date +%Y-%m-%d).log") 2>&1
 
 DATE=$(date +%Y-%m-%d)
 TIME=$(date +%H%M%S)

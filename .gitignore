@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 .env
 reports/
+logs/
 state/journal/
 *.log
 .DS_Store

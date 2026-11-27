@@ -27,9 +27,9 @@ required_skills:
   - market-breadth-analyzer
   - uptrend-analyzer
   - exposure-coach
-optional_skills:
-  - market-top-detector
-  - macro-regime-detector
+# Non installés dans ce projet : l'exposure-coach tourne sans eux
+# (confiance LOW, entrées manquantes : regime, top_risk, ...).
+optional_skills: []
 
 artifacts:
   - id: market_breadth_report
@@ -41,11 +41,8 @@ artifacts:
   - id: uptrend_report
     produced_by_step: 2
     required: true
-  - id: top_risk_report
-    produced_by_step: 3
-    required: false
   - id: exposure_decision
-    produced_by_step: 4
+    produced_by_step: 3
     required: true
     downstream_hints:
       - swing-opportunity-daily
@@ -68,31 +65,22 @@ steps:
     decision_gate: false
 
   - step: 3
-    name: Check market top risk (optional FMP key required)
-    name_ja: 市場天井のリスクを確認する（任意ステップ・FMPキー必須）
-    skill: market-top-detector
-    optional: true
-    produces:
-      - top_risk_report
-    decision_gate: false
-
-  - step: 4
     name: Decide exposure posture
     name_ja: エクスポージャー方針を決定する
     skill: exposure-coach
     consumes:
       - market_breadth_report
       - uptrend_report
-      - top_risk_report
     produces:
       - exposure_decision
     decision_gate: true
     decision_question: >-
-      Given today's breadth, uptrend participation, and top risk, is new swing
-      trade risk allowed, restricted, or cash-priority?
+      Given today's breadth and uptrend participation, is new swing trade
+      risk allowed (NEW_ENTRY_ALLOWED), restricted (REDUCE_ONLY), or
+      cash-priority (CASH_PRIORITY)?
     decision_question_ja: >-
-      本日の騰落状況、上昇トレンドへの参加状況、市場天井リスクを踏まえ、
-      新規スイング取引のリスクを allow、restrict、cash-priority の
+      本日の騰落状況と上昇トレンドへの参加状況を踏まえ、新規スイング取引の
+      リスクを NEW_ENTRY_ALLOWED、REDUCE_ONLY、CASH_PRIORITY の
       どれにするか。
 
 manual_review:

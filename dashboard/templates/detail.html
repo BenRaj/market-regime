@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}market-regime — {{ date_str }}{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  Rapport du {{ date_str }}
+  <span><a href="/">← Aujourd'hui</a> &nbsp;·&nbsp; <a href="/history">Historique</a></span>
+</div>
+
+{# ── Résumé ── #}
+<div class="card">
+  <h2>Posture</h2>
+  <div class="hero">
+    <div>
+      <div class="hero-rec {{ exposure.recommendation }}">
+        {% if exposure.recommendation == 'CASH_PRIORITY' %}⚠ Cash Priority
+        {% elif exposure.recommendation == 'REDUCE_ONLY' %}⬇ Reduce Only
+        {% else %}✅ New Entry Allowed{% endif %}
+      </div>
+      <div class="hero-meta">
+        Confiance : <span class="badge {{ exposure.confidence }}">{{ exposure.confidence }}</span>
+        &nbsp;·&nbsp; Biais : {{ exposure.bias }}
+        &nbsp;·&nbsp; Participation : {{ exposure.participation }}
+      </div>
+    </div>
+    <div>
+      <div class="ceiling-badge">{{ exposure.exposure_ceiling_pct }}%</div>
+      <div class="ceiling-label">Plafond</div>
+    </div>
+  </div>
+</div>
+
+{# ── Tabs rapports markdown ── #}
+<div class="card tabs-container">
+  <h2>Rapports détaillés</h2>
+  <div class="tabs">
+    {% if exposure_md %}
+    <button class="tab-btn active" data-target="tab-exposure">Exposure Coach</button>
+    {% endif %}
+    {% if breadth_md %}
+    <button class="tab-btn {% if not exposure_md %}active{% endif %}" data-target="tab-breadth">Market Breadth</button>
+    {% endif %}
+    {% if uptrend_md %}
+    <button class="tab-btn" data-target="tab-uptrend">Uptrend</button>
+    {% endif %}
+  </div>
+
+  {% if exposure_md %}
+  <div class="tab-panel active" id="tab-exposure">
+    <pre class="md-block">{{ exposure_md }}</pre>
+  </div>
+  {% endif %}
+
+  {% if breadth_md %}
+  <div class="tab-panel {% if not exposure_md %}active{% endif %}" id="tab-breadth">
+    <pre class="md-block">{{ breadth_md }}</pre>
+  </div>
+  {% endif %}
+
+  {% if uptrend_md %}
+  <div class="tab-panel" id="tab-uptrend">
+    <pre class="md-block">{{ uptrend_md }}</pre>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Sector ── #}
+{% if sector and sector.ranking %}
+<div class="card">
+  <h2>Rotation sectorielle — cycle : {{ sector.cycle_phase.phase | capitalize }}</h2>
+  <table class="sector-table">
+    <thead>
+      <tr><th>#</th><th>Secteur</th><th>Ratio</th><th>Tendance</th><th>Statut</th></tr>
+    </thead>
+    <tbody>
+      {% for s in sector.ranking %}
+      <tr>
+        <td style="color:var(--muted)">{{ s.rank }}</td>
+        <td>{{ s.sector }}</td>
+        <td>{{ "%.1f"|format(s.ratio_pct) }}%</td>
+        <td class="{% if s.trend == 'Up' %}trend-up{% else %}trend-down{% endif %}">{{ s.trend }}</td>
+        <td style="color:var(--muted);font-size:0.8rem">{{ s.status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# ── Inputs manquants ── #}
+{% if exposure.inputs_missing %}
+<div class="card">
+  <h2>Inputs manquants</h2>
+  <div class="missing-list">
+    {% for inp in exposure.inputs_missing %}
+    <span class="missing-tag">{{ inp }}</span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -66,6 +66,11 @@ jobs:
           venv/bin/python skills/uptrend-analyzer/scripts/uptrend_analyzer.py --help >/dev/null
           venv/bin/python skills/exposure-coach/scripts/calculate_exposure.py --help >/dev/null
           echo "scripts OK"
+          # Redémarre le dashboard si le service existe
+          if systemctl is-active --quiet market-regime-web 2>/dev/null; then
+            sudo systemctl restart market-regime-web
+            echo "dashboard redémarré"
+          fi
           REMOTE
           echo "✅ Déploiement VPS terminé"
 

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}market-regime — Historique{% endblock %}
+
+{% block content %}
+<div class="page-title">Historique <span>{{ rows | length }} jour(s)</span></div>
+
+{% if not rows %}
+<div class="card"><p style="color:var(--muted)">Aucun rapport disponible.</p></div>
+{% else %}
+<div class="card">
+  <table class="hist-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Décision</th>
+        <th>Plafond</th>
+        <th>Confiance</th>
+        <th>Breadth</th>
+        <th>Uptrend</th>
+        <th>Sector</th>
+        <th>Inputs manquants</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a href="/reports/{{ row.date }}">{{ row.date }}</a></td>
+        <td><span class="rec {{ row.recommendation }}">{{ row.recommendation }}</span></td>
+        <td style="font-weight:600">{{ row.exposure_ceiling_pct }}%</td>
+        <td><span class="badge {{ row.confidence }}">{{ row.confidence }}</span></td>
+        <td>{{ row.breadth_score if row.breadth_score is not none else '—' }}</td>
+        <td>{{ row.uptrend_score if row.uptrend_score is not none else '—' }}</td>
+        <td>{{ row.sector_score if row.sector_score is not none else '—' }}</td>
+        <td style="color:var(--muted);font-size:0.78rem">{{ row.inputs_missing | join(', ') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

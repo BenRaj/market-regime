@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}market-regime — {{ today }}{% endblock %}
+
+{% block content %}
+
+{% if not exposure %}
+<div class="card">
+  <p style="color:var(--muted)">Aucun rapport disponible. Lancer <code>./run_daily.sh</code> pour générer le premier rapport.</p>
+</div>
+{% else %}
+
+{# ── Navigation jours récents ── #}
+{% if recent_dates %}
+<div class="day-nav">
+  {% for d in recent_dates %}
+  <a href="/reports/{{ d }}" class="day-pill {% if loop.first %}today{% endif %}">{{ d }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Hero : décision ── #}
+<div class="card">
+  <h2>Posture du jour — {{ today }}</h2>
+  <div class="hero">
+    <div>
+      <div class="hero-rec {{ exposure.recommendation }}">
+        {% if exposure.recommendation == 'CASH_PRIORITY' %}⚠ Cash Priority
+        {% elif exposure.recommendation == 'REDUCE_ONLY' %}⬇ Reduce Only
+        {% else %}✅ New Entry Allowed
+        {% endif %}
+      </div>
+      <div class="hero-meta">
+        Confiance : <span class="badge {{ exposure.confidence }}">{{ exposure.confidence }}</span>
+        &nbsp;·&nbsp; Biais : {{ exposure.bias }}
+        &nbsp;·&nbsp; Participation : {{ exposure.participation }}
+      </div>
+    </div>
+    <div>
+      <div class="ceiling-badge">{{ exposure.exposure_ceiling_pct }}%</div>
+      <div class="ceiling-label">Plafond d'exposition</div>
+    </div>
+  </div>
+</div>
+
+{# ── Scores ── #}
+<div class="card">
+  <h2>Composantes</h2>
+  <div class="scores-grid">
+
+    {% set scores = exposure.component_scores %}
+
+    {% macro score_color(v) %}
+      {%- if v is none -%}score-vlow
+      {%- elif v >= 60 -%}score-high
+      {%- elif v >= 40 -%}score-medium
+      {%- elif v >= 25 -%}score-low
+      {%- else -%}score-vlow{%- endif -%}
+    {% endmacro %}
+
+    <div class="score-item">
+      <div class="score-value {{ score_color(scores.breadth_score) }}">{{ scores.breadth_score if scores.breadth_score is not none else '—' }}</div>
+      <div class="score-label">Breadth</div>
+      {% if breadth %}<div class="score-status">{{ breadth.health_zone }}</div>{% endif %}
+    </div>
+
+    <div class="score-item">
+      <div class="score-value {{ score_color(scores.uptrend_score) }}">{{ scores.uptrend_score if scores.uptrend_score is not none else '—' }}</div>
+      <div class="score-label">Uptrend Ratio</div>
+      {% if uptrend %}<div class="score-status">{{ uptrend.zone }}</div>{% endif %}
+    </div>
+
+    {% if scores.sector_score is not none %}
+    <div class="score-item">
+      <div class="score-value {{ score_color(scores.sector_score) }}">{{ scores.sector_score }}</div>
+      <div class="score-label">Sector</div>
+      {% if sector %}<div class="score-status">{{ sector.groups.regime | capitalize }}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if scores.get('regime_score') is not none %}
+    <div class="score-item">
+      <div class="score-value {{ score_color(scores.get('regime_score')) }}">{{ scores.get('regime_score') }}</div>
+      <div class="score-label">Regime</div>
+    </div>
+    {% endif %}
+
+    {% if scores.get('ftd_score') is not none %}
+    <div class="score-item">
+      <div class="score-value {{ score_color(scores.get('ftd_score')) }}">{{ scores.get('ftd_score') }}</div>
+      <div class="score-label">FTD</div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{# ── Rationale ── #}
+{% if exposure.rationale %}
+<div class="card">
+  <h2>Raisonnement</h2>
+  <p class="rationale">{{ exposure.rationale }}</p>
+</div>
+{% endif %}
+
+{# ── Sector rotation ── #}
+{% if sector and sector.ranking %}
+<div class="card">
+  <h2>Rotation sectorielle — cycle : {{ sector.cycle_phase.phase | capitalize }} ({{ sector.cycle_phase.confidence }})</h2>
+  <table class="sector-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Secteur</th>
+        <th>Ratio</th>
+        <th>Tendance</th>
+        <th>Statut</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sector.ranking %}
+      <tr>
+        <td style="color:var(--muted)">{{ s.rank }}</td>
+        <td>{{ s.sector }}</td>
+        <td>{{ "%.1f"|format(s.ratio_pct) }}%</td>
+        <td class="{% if s.trend == 'Up' %}trend-up{% else %}trend-down{% endif %}">{{ s.trend }}</td>
+        <td style="color:var(--muted);font-size:0.8rem">{{ s.status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# ── Inputs manquants ── #}
+{% if exposure.inputs_missing %}
+<div class="card">
+  <h2>Inputs manquants (confiance réduite)</h2>
+  <div class="missing-list">
+    {% for inp in exposure.inputs_missing %}
+    <span class="missing-tag">{{ inp }}</span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% endif %}{# end if exposure #}
+{% endblock %}

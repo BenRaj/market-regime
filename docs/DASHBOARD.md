@@ -1,23 +1,24 @@
-# Dashboard — Installation sur le VPS
+# Dashboard : installation sur le VPS
+
+Prototype : uvicorn écoute directement sur le port 8081, sans nginx. Le port 8000 reste réservé à TrdEsk.
 
 ## Architecture
 
 ```
-nginx (port 80)  →  uvicorn/FastAPI (127.0.0.1:8000)
-systemd : market-regime-web.service
+navigateur  →  uvicorn / FastAPI (0.0.0.0:8081)
+systemd : market-regime-web.service (utilisateur deploy)
 ```
 
-## 1. Mettre à jour le venv (après le déploiement CD)
+Le dashboard lit les rapports de `/opt/market-regime/reports/`. Il n'écrit rien.
+
+Le CD (`.github/workflows/deploy.yml`) copie le code, met à jour le venv, puis redémarre le service s'il est actif. Il ne crée ni le service, ni la règle sudo, ni la règle de pare-feu : ces trois points se font une seule fois, à la main.
+
+Les commandes ci-dessous se lancent **sur le VPS**, en `root` (`ssh root@62.238.63.39`).
+
+## 1. Service systemd (une seule fois)
 
 ```bash
-cd /opt/market-regime
-./install_server.sh --no-cron --no-test-run
-```
-
-## 2. Créer le service systemd
-
-```bash
-sudo tee /etc/systemd/system/market-regime-web.service > /dev/null << 'EOF'
+cat > /etc/systemd/system/market-regime-web.service << 'EOF'
 [Unit]
 Description=market-regime dashboard
 After=network.target
@@ -34,62 +35,60 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-sudo systemctl daemon-reload
-sudo systemctl enable market-regime-web
-sudo systemctl start market-regime-web
-sudo systemctl status market-regime-web
+systemctl daemon-reload
+systemctl enable --now market-regime-web
+systemctl status market-regime-web --no-pager
 ```
 
-## 3. Configurer nginx
+Vérifier que le port 8081 est libre avant de démarrer : `ss -ltnp | grep 8081`.
+
+## 2. Droit de redémarrage pour le CD (une seule fois)
+
+L'utilisateur `deploy` n'a pas sudo. Cette règle l'autorise à redémarrer ce seul service :
 
 ```bash
-sudo tee /etc/nginx/sites-available/market-regime > /dev/null << 'EOF'
-server {
-    listen 80;
-    server_name _;          # remplacer par ton domaine si tu en as un
-
-    location / {
-        proxy_pass         http://127.0.0.1:8000;
-        proxy_set_header   Host $host;
-        proxy_set_header   X-Real-IP $remote_addr;
-        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-
-    location /static/ {
-        alias /opt/market-regime/dashboard/static/;
-        expires 1d;
-    }
-}
-EOF
-
-sudo ln -sf /etc/nginx/sites-available/market-regime /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
+echo 'deploy ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart market-regime-web' > /etc/sudoers.d/market-regime-web
+chmod 440 /etc/sudoers.d/market-regime-web
+visudo -c
 ```
+
+Vérification : `sudo -l -U deploy` doit afficher la ligne `/usr/bin/systemctl restart market-regime-web`.
+
+## 3. Accès au dashboard
+
+Le dashboard n'a **aucune authentification**. Ne pas ouvrir le port à tout internet.
+
+Option A, recommandée : n'autoriser que votre adresse IP.
+
+```bash
+ufw allow from VOTRE_IP to any port 8081 proto tcp
+```
+
+Remplacer VOTRE_IP par votre adresse publique, sans chevrons. Si le pare-feu Hetzner (console cloud) est actif, y ouvrir aussi le port 8081 pour cette adresse.
+
+Option B : tunnel SSH, sans ouvrir le port. Sur le **Mac** :
+
+```bash
+ssh -L 8081:127.0.0.1:8081 deploy@62.238.63.39
+```
+
+Puis ouvrir `http://127.0.0.1:8081` dans le navigateur. Le port 8081 ne doit alors pas être ouvert dans `ufw`.
 
 ## 4. Vérification
 
-```bash
-# Service en marche
-sudo systemctl status market-regime-web
-
-# Réponse locale
-curl -s http://127.0.0.1:8000/ | head -5
-
-# Depuis l'extérieur
-curl -s http://62.238.63.39/ | head -5
-```
-
-## Redémarrage après déploiement CD
-
-Ajouter dans `.github/workflows/deploy.yml`, à la fin du step SSH :
+Sur le VPS :
 
 ```bash
-sudo systemctl restart market-regime-web
+systemctl is-active market-regime-web
+curl -s http://127.0.0.1:8081/ | head -5
 ```
 
-Et autoriser `deploy` à redémarrer ce service sans mot de passe :
+## Après un déploiement
 
-```bash
-echo 'deploy ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart market-regime-web' \
-  | sudo tee /etc/sudoers.d/market-regime-web
-```
+Le CD redémarre le service seul. En cas d'échec, relancer à la main, en root : `systemctl restart market-regime-web`.
+
+## Limites connues (prototype)
+
+- Pas d'authentification ni de HTTPS.
+- Pas de validation du format de la date dans `/reports/{date}` (test de traversée de chemin : 404).
+- Pas de tests ni de CI pour le dashboard.
